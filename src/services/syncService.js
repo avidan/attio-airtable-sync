@@ -473,9 +473,21 @@ class SyncService {
       const isEnabled = mapping.enabled !== false;
 
       if (isEnabled && mapping.attioField && mapping.airtableField) {
-        const value = extractAttioValue(attioRecord, mapping.attioField);
+        // Handle both field objects and string field names
+        const attioFieldName =
+          typeof mapping.attioField === "object"
+            ? mapping.attioField.slug ||
+              mapping.attioField.name ||
+              mapping.attioField.id
+            : mapping.attioField;
+        const airtableFieldName =
+          typeof mapping.airtableField === "object"
+            ? mapping.airtableField.name || mapping.airtableField.id
+            : mapping.airtableField;
+
+        const value = extractAttioValue(attioRecord, attioFieldName);
         if (value !== undefined) {
-          mapped[mapping.airtableField] = this.transformValue(
+          mapped[airtableFieldName] = this.transformValue(
             value,
             mapping.transformations,
             "toAirtable",
