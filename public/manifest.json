@@ -1,0 +1,16 @@
+{
+  "name": "Attio Airtable Sync",
+  "short_name": "AttioSync",
+  "description": "Sync data between Attio CRM and Airtable with intelligent field mapping",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32",
+      "type": "image/x-icon"
+    }
+  ]
+}

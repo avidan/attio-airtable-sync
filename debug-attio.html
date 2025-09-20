@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Debug Attio Objects</title>
+    </head>
+    <body>
+        <h1>Attio Objects Debug</h1>
+        <button onclick="debugAttio()">Check Available Objects</button>
+        <button onclick="checkStoredConnection()" style="margin-left: 10px">
+            Check Stored Connection
+        </button>
+        <div id="output"></div>
+
+        <script>
+            async function debugAttio() {
+                const output = document.getElementById("output");
+                output.innerHTML = "<p>Loading...</p>";
+
+                try {
+                    // Get stored connection
+                    const storedConnection =
+                        localStorage.getItem("attio_connection");
+                    if (!storedConnection) {
+                        output.innerHTML =
+                            '<p style="color: red;">No Attio connection found in localStorage</p>';
+                        return;
+                    }
+
+                    const connection = JSON.parse(storedConnection);
+                    console.log("Stored connection:", connection);
+
+                    // Test API call
+                    const response = await fetch(
+                        "https://api.attio.com/v2/objects",
+                        {
+                            headers: {
+                                Authorization: `Bearer ${connection.token}`,
+                                "Content-Type": "application/json",
+                            },
+                        },
+                    );
+
+                    if (!response.ok) {
+                        output.innerHTML = `<p style="color: red;">API Error: ${response.status} - ${response.statusText}</p>`;
+                        return;
+                    }
+
+                    const data = await response.json();
+                    console.log("API response:", data);
+
+                    let html = "<h2>Current Connection:</h2>";
+                    html += `<p>Object ID: <strong>${connection.objectId}</strong></p>`;
+                    html += "<h2>Available Objects:</h2>";
+                    html += "<ul>";
+
+                    if (data.data && data.data.length > 0) {
+                        data.data.forEach((obj) => {
+                            const isCurrentObj = obj.id === connection.objectId;
+                            html += `<li style="${isCurrentObj ? "background: yellow; font-weight: bold;" : ""}">`;
+                            html += `ID: <code>${obj.id}</code>, Name: ${obj.singular_noun || obj.name || "Unknown"}`;
+                            if (isCurrentObj) html += " <-- CURRENT";
+                            html += "</li>";
+                        });
+                    } else {
+                        html += "<li>No objects found</li>";
+                    }
+
+                    html += "</ul>";
+                    html += "<h2>Fix Connection:</h2>";
+                    html +=
+                        "<p>Click one of these buttons to update your connection:</p>";
+
+                    if (data.data && data.data.length > 0) {
+                        data.data.forEach((obj) => {
+                            html += `<button onclick="updateConnection('${obj.id}')" style="margin: 5px; padding: 10px;">Use "${obj.id}" (${obj.singular_noun || obj.name})</button>`;
+                        });
+                    }
+
+                    output.innerHTML = html;
+                } catch (error) {
+                    console.error("Error:", error);
+                    output.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                }
+            }
+
+            function updateConnection(newObjectId) {
+                try {
+                    const connection = JSON.parse(
+                        localStorage.getItem("attio_connection"),
+                    );
+                    connection.objectId = newObjectId;
+                    localStorage.setItem(
+                        "attio_connection",
+                        JSON.stringify(connection),
+                    );
+                    alert(
+                        `Connection updated to use object: ${newObjectId}\n\nRefresh your main app and try syncing again.`,
+                    );
+                } catch (error) {
+                    alert("Error updating connection: " + error.message);
+                }
+            }
+        </script>
+    </body>
+</html>
