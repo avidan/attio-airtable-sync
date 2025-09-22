@@ -436,6 +436,13 @@ class SyncService {
   mapAttioToAirtable(attioRecord) {
     const mapped = {};
 
+    // Log the incoming record structure
+    this.log(
+      "debug",
+      `Attio record structure: ${JSON.stringify(attioRecord).substring(0, 500)}`,
+    );
+    this.log("debug", `Field mappings: ${JSON.stringify(this.fieldMappings)}`);
+
     // Helper function to extract value from Attio's nested structure
     const extractAttioValue = (record, fieldName) => {
       // Check if the field exists in values
@@ -451,18 +458,40 @@ class SyncService {
             return firstValue.value;
           } else if (firstValue.domain) {
             return firstValue.domain;
+          } else if (firstValue.email_address) {
+            return firstValue.email_address;
+          } else if (firstValue.original_url) {
+            return firstValue.original_url;
           } else if (firstValue.option) {
             // For select fields, return the title
             return firstValue.option.title;
+          } else if (firstValue.target_object && firstValue.target_record_id) {
+            // For reference fields, return the display value or ID
+            return (
+              firstValue.referenced_actor_name || firstValue.target_record_id
+            );
           } else if (firstValue.locality || firstValue.region) {
             // For location fields, combine locality and region
             return `${firstValue.locality || ""}, ${firstValue.region || ""}`
               .trim()
               .replace(/^,\s*/, "");
+          } else if (
+            typeof firstValue === "string" ||
+            typeof firstValue === "number"
+          ) {
+            // Direct value
+            return firstValue;
           }
         } else if (Array.isArray(fieldData)) {
           // Empty array - return undefined
           return undefined;
+        } else if (
+          typeof fieldData === "string" ||
+          typeof fieldData === "number" ||
+          typeof fieldData === "boolean"
+        ) {
+          // Direct value (not in array)
+          return fieldData;
         }
       }
       return undefined;
@@ -474,28 +503,38 @@ class SyncService {
 
       if (isEnabled && mapping.attioField && mapping.airtableField) {
         // Handle both field objects and string field names
+        // For Attio fields, the ID is the api_slug that we need to use
         const attioFieldName =
           typeof mapping.attioField === "object"
-            ? mapping.attioField.slug ||
-              mapping.attioField.name ||
-              mapping.attioField.id
+            ? mapping.attioField.id || // This is actually the api_slug from the field loading
+              mapping.attioField.slug ||
+              mapping.attioField.name
             : mapping.attioField;
         const airtableFieldName =
           typeof mapping.airtableField === "object"
             ? mapping.airtableField.name || mapping.airtableField.id
             : mapping.airtableField;
 
+        this.log("debug", `Mapping ${attioFieldName} -> ${airtableFieldName}`);
+
         const value = extractAttioValue(attioRecord, attioFieldName);
-        if (value !== undefined) {
+        this.log("debug", `Extracted value for ${attioFieldName}: ${value}`);
+
+        if (value !== undefined && value !== null && value !== "") {
           mapped[airtableFieldName] = this.transformValue(
             value,
             mapping.transformations,
             "toAirtable",
           );
+          this.log(
+            "debug",
+            `Mapped ${airtableFieldName} = ${mapped[airtableFieldName]}`,
+          );
         }
       }
     }
 
+    this.log("info", `Final mapped record: ${JSON.stringify(mapped)}`);
     return mapped;
   }
 
@@ -598,23 +637,33 @@ class SyncService {
         this.syncConfig.airtableTableId || this.syncConfig.airtableTable;
       const endpoint = `https://api.airtable.com/v0/${airtableConnection.baseId}/${tableId}`;
 
+      // Log what we're about to send
+      const requestBody = {
+        fields: record,
+      };
+      this.log(
+        "info",
+        `Creating Airtable record with data: ${JSON.stringify(requestBody)}`,
+      );
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${airtableConnection.token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          fields: record,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
         const error = await response.text();
+        this.log("error", `Airtable API error response: ${error}`);
         throw new Error(`Failed to create Airtable record: ${error}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      this.log("success", `Created Airtable record: ${result.id}`);
+      return result;
     } catch (error) {
       this.log("error", `Error creating Airtable record: ${error.message}`);
       throw error;
